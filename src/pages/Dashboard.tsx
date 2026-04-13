@@ -1,5 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { fetchVehicles } from '../services/api'
+import React, { useEffect, useMemo } from 'react'
+import { useAppDispatch, useAppSelector } from '../store/hooks'
+import {
+  loadVehicles,
+  setQuery, setSort, setSelectedMake,
+  setPriceRange, setStockFilter, setPage, clearFilters,
+} from '../store/vehicleSlice'
 import VehicleCard from '../components/VehicleCard'
 import VehicleModal from '../components/VehicleModal'
 import SearchBar from '../components/SearchBar'
@@ -9,45 +14,32 @@ import PriceFilter from '../components/PriceFilter'
 import StockFilter from '../components/StockFilter'
 import Pagination from '../components/Pagination'
 import useDebounce from '../hooks/useDebounce'
+import { useState } from 'react'
 import type { Vehicle } from '../types/vehicle'
-import type { SortOption } from '../types/sort'
 
 const LIMIT = 10
 
 const Dashboard: React.FC = () => {
-  const [allVehicles, setAllVehicles] = useState<Vehicle[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
+  const dispatch = useAppDispatch()
 
-  const [makes, setMakes] = useState<string[]>([])
-  const [selectedMake, setSelectedMake] = useState('')
-  const [priceRange, setPriceRange] = useState('')
-  const [stockFilter, setStockFilter] = useState('')
-  const [query, setQuery] = useState('')
-  const [sort, setSort] = useState<SortOption>('price_asc')
-  const [page, setPage] = useState(1)
+  const { items, loading, error, query, sort, selectedMake, priceRange, stockFilter, page } =
+    useAppSelector((s) => s.vehicles)
+
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
 
   const debouncedQuery = useDebounce(query)
 
   useEffect(() => {
-    setLoading(true)
-    fetchVehicles()
-      .then((res) => {
-        setAllVehicles(res.products)
-        const uniqueMakes = [...new Set(res.products.map((v) => v.brand).filter(Boolean))] as string[]
-        setMakes(uniqueMakes)
-      })
-      .catch(() => setError('Failed to load vehicles. Please try again.'))
-      .finally(() => setLoading(false))
-  }, [])
+    dispatch(loadVehicles())
+  }, [dispatch])
 
-  useEffect(() => {
-    setPage(1)
-  }, [debouncedQuery, sort, selectedMake, priceRange, stockFilter])
+  const makes = useMemo(
+    () => [...new Set(items.map((v) => v.brand).filter(Boolean))] as string[],
+    [items]
+  )
 
   const filtered = useMemo(() => {
-    let result = allVehicles
+    let result = items
 
     if (debouncedQuery.trim()) {
       const q = debouncedQuery.toLowerCase()
@@ -78,21 +70,21 @@ const Dashboard: React.FC = () => {
     return [...result].sort((a, b) =>
       sort === 'price_asc' ? a.price - b.price : a.title.localeCompare(b.title)
     )
-  }, [allVehicles, debouncedQuery, sort, selectedMake, priceRange, stockFilter])
+  }, [items, debouncedQuery, sort, selectedMake, priceRange, stockFilter])
 
   const totalPages = Math.ceil(filtered.length / LIMIT)
   const paginated = filtered.slice((page - 1) * LIMIT, page * LIMIT)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-cyan-50 relative overflow-hidden">
-      
-      {/* Animated Background Blobs */}
+
+      {/* Background */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-40">
         <div className="absolute -top-40 -left-40 w-96 h-96 bg-gradient-to-br from-violet-200 to-purple-200 rounded-full blur-3xl" />
         <div className="absolute top-1/3 -right-40 w-96 h-96 bg-gradient-to-br from-cyan-200 to-blue-200 rounded-full blur-3xl" />
       </div>
 
-      {/* Header with Glassmorphism */}
+      {/* Header */}
       <header className="relative z-10 border-b border-gray-200 bg-white/90 backdrop-blur-md sticky top-0 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -114,7 +106,6 @@ const Dashboard: React.FC = () => {
                 <span className="text-xs text-emerald-700 font-bold">{filtered.length} Live</span>
               </div>
             )}
-            
             <div className="w-11 h-11 rounded-full bg-gradient-to-br from-violet-600 to-cyan-600 flex items-center justify-center text-white font-black text-sm shadow-lg cursor-pointer hover:scale-105 transition-transform">
               H
             </div>
@@ -124,7 +115,7 @@ const Dashboard: React.FC = () => {
 
       <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-8 py-12">
 
-        {/* Hero Section */}
+        {/* Hero */}
         <div className="mb-10 text-center">
           <h2 className="text-5xl sm:text-6xl font-black text-gray-900 tracking-tight mb-3">
             Discover Your{' '}
@@ -140,14 +131,13 @@ const Dashboard: React.FC = () => {
         {/* Search & Filters */}
         <div className="flex flex-col gap-4 mb-10">
           <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-lg">
-            <SearchBar value={query} onChange={setQuery} />
+            <SearchBar value={query} onChange={(v) => dispatch(setQuery(v))} />
           </div>
-
           <div className="flex flex-wrap gap-3">
-            <BrandFilter makes={makes} selected={selectedMake} onChange={setSelectedMake} loading={loading} />
-            <PriceFilter value={priceRange} onChange={setPriceRange} />
-            <StockFilter value={stockFilter} onChange={setStockFilter} />
-            <SortDropdown value={sort} onChange={setSort} />
+            <BrandFilter makes={makes} selected={selectedMake} onChange={(v) => dispatch(setSelectedMake(v))} loading={loading} />
+            <PriceFilter value={priceRange} onChange={(v) => dispatch(setPriceRange(v))} />
+            <StockFilter value={stockFilter} onChange={(v) => dispatch(setStockFilter(v))} />
+            <SortDropdown value={sort} onChange={(v) => dispatch(setSort(v))} />
           </div>
         </div>
 
@@ -157,33 +147,30 @@ const Dashboard: React.FC = () => {
             <span className="text-sm text-gray-600 font-semibold">Active:</span>
             {selectedMake && (
               <button
-                onClick={() => setSelectedMake('')}
+                onClick={() => dispatch(setSelectedMake(''))}
                 className="inline-flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-sm font-bold px-4 py-2 rounded-full hover:scale-105 transition-all shadow-md"
               >
-                <span>{selectedMake}</span>
-                <span>✕</span>
+                {selectedMake} ✕
               </button>
             )}
             {priceRange && (
               <button
-                onClick={() => setPriceRange('')}
+                onClick={() => dispatch(setPriceRange(''))}
                 className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-500 text-white text-sm font-bold px-4 py-2 rounded-full hover:scale-105 transition-all shadow-md"
               >
-                <span>Price</span>
-                <span>✕</span>
+                Price ✕
               </button>
             )}
             {stockFilter && (
               <button
-                onClick={() => setStockFilter('')}
+                onClick={() => dispatch(setStockFilter(''))}
                 className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-bold px-4 py-2 rounded-full hover:scale-105 transition-all shadow-md"
               >
-                <span>{stockFilter === 'in-stock' ? 'In Stock' : 'Out'}</span>
-                <span>✕</span>
+                {stockFilter === 'in-stock' ? 'In Stock' : 'Out of Stock'} ✕
               </button>
             )}
             <button
-              onClick={() => { setSelectedMake(''); setPriceRange(''); setStockFilter('') }}
+              onClick={() => dispatch(clearFilters())}
               className="text-sm text-red-600 font-bold underline underline-offset-2 hover:text-red-700 transition"
             >
               Clear All
@@ -216,20 +203,16 @@ const Dashboard: React.FC = () => {
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center h-96 gap-4">
-            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-red-100 to-rose-100 border-2 border-red-300 flex items-center justify-center text-4xl shadow-xl">
-              ⚠️
-            </div>
+            <div className="w-20 h-20 rounded-3xl bg-red-50 border-2 border-red-200 flex items-center justify-center text-4xl">⚠️</div>
             <p className="text-red-600 text-base font-bold">{error}</p>
           </div>
         ) : paginated.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-96 gap-4">
-            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-gray-100 to-slate-100 border-2 border-gray-300 flex items-center justify-center text-4xl shadow-xl">
-              🔍
-            </div>
+            <div className="w-20 h-20 rounded-3xl bg-gray-100 border-2 border-gray-200 flex items-center justify-center text-4xl">🔍</div>
             <p className="text-base text-gray-600 font-bold">No vehicles found</p>
             <button
-              onClick={() => { setQuery(''); setSelectedMake(''); setPriceRange(''); setStockFilter('') }}
-              className="px-6 py-3 bg-gradient-to-r from-violet-600 to-cyan-600 text-white font-bold rounded-full hover:scale-105 transition-all shadow-xl shadow-violet-200"
+              onClick={() => dispatch(clearFilters())}
+              className="px-6 py-3 bg-gradient-to-r from-violet-600 to-cyan-600 text-white font-bold rounded-full hover:scale-105 transition-all shadow-lg"
             >
               Clear All Filters
             </button>
@@ -244,11 +227,10 @@ const Dashboard: React.FC = () => {
 
         {/* Pagination */}
         {!loading && !error && (
-          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+          <Pagination page={page} totalPages={totalPages} onPageChange={(p) => dispatch(setPage(p))} />
         )}
       </main>
 
-      {/* Modal */}
       {selectedVehicle && <VehicleModal vehicle={selectedVehicle} onClose={() => setSelectedVehicle(null)} />}
     </div>
   )
